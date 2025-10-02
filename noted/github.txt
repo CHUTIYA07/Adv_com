@@ -1,0 +1,6 @@
+#update workspace
+git pull origin main
+#upload workspace
+git add .
+git commit -m "ur name na ka"
+git push origin main
