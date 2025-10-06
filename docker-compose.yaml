@@ -1,1 +1,67 @@
-#RUN pip-install docker
+version: "3.9"
+
+services:
+  db:
+    image: postgres:15
+    container_name: advcom_db
+    environment:
+      POSTGRES_DB: advcom
+      POSTGRES_USER: advuser
+      POSTGRES_PASSWORD: advpass
+    # Use 5433 on host to avoid clashing with any local Postgres
+    ports:
+      - "5433:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ./fastapi
+    container_name: advcom_api
+    command: uvicorn app:app --host 0.0.0.0 --port 8000 --reload
+    env_file:
+      - .env
+    environment:
+      # SQLAlchemy/psycopg2 style
+      DATABASE_URL: postgresql+psycopg2://advuser:advpass@db:5432/advcom
+      # If you use async (databases/asyncpg), point your code to this:
+      DATABASE_URL_ASYNC: postgresql+asyncpg://advuser:advpass@db:5432/advcom
+      CORS_ORIGINS: http://localhost:3000
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    # (optional for live dev)
+    # volumes:
+    #   - ./fastapi:/app
+
+  web:
+    build:
+      context: ./nextjs
+    container_name: advcom_web
+    # If your Next.js Dockerfile does install+build, you can keep the default CMD there.
+    # For dev hot-reload, uncomment the command below:
+    # command: sh -c "npm install && npm run dev"
+    env_file:
+      - .env
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+    depends_on:
+      - api
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+    # (optional for live dev)
+    # volumes:
+    #   - ./nextjs:/app
+
+volumes:
+  db_data:
